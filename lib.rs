@@ -1,6 +1,5 @@
 #![no_std]
 
-// Import necessary modules and macros from the elrond_wasm library.
 elrond_wasm::imports!();
 
 #[elrond_wasm::contract]
@@ -9,25 +8,30 @@ pub trait CitizenNFT {
     #[init]
     fn init(&self) {}
 
-    /// Endpoint to allow users to mint a "CITIZEN" NFT by burning 10 wood and 15 food tokens.
+    /// Endpoint to allow users to mint a "CITIZEN" NFT by burning 10 WOOD and 15 FOOD tokens.
     #[payable("*")]
     #[endpoint(mintCitizen)]
     fn mint_citizen(&self) -> SCResult<()> {
-        // Ensure the correct amounts of "WOOD" and "FOOD" tokens are sent.
-        let wood_amount = self.call_value().get_extra("WOOD");
-        let food_amount = self.call_value().get_extra("FOOD");
+        let caller = self.blockchain().get_caller();
+        let wood_token_id: TokenIdentifier = TokenIdentifier::from("WOOD");
+        let food_token_id: TokenIdentifier = TokenIdentifier::from("FOOD");
 
+        // Check if the correct amount of WOOD tokens are sent
+        let wood_amount = self.call_value().egld_value();
         require!(wood_amount == 10u64.into(), "Require 10 WOOD tokens");
+
+        // Check if the correct amount of FOOD tokens are sent
+        let food_amount = self.call_value().egld_value();
         require!(food_amount == 15u64.into(), "Require 15 FOOD tokens");
 
-        // Burn the tokens by sending them to the zero address.
-        self.send().direct(&ManagedAddress::zero(), &TokenIdentifier::from("WOOD"), 0, &wood_amount, &[]);
-        self.send().direct(&ManagedAddress::zero(), &TokenIdentifier::from("FOOD"), 0, &food_amount, &[]);
+        // Burn the tokens: Use the token burn mechanism provided by the token contract
+        self.send().direct(&ManagedAddress::zero(), &wood_token_id, 0, &wood_amount, &[]);
+        self.send().direct(&ManagedAddress::zero(), &food_token_id, 0, &food_amount, &[]);
 
-        // Schedule the NFT minting event for 1 hour later.
-        let current_block = self.blockchain().get_block_round();
-        let mint_block = current_block + self.rounds_for_one_hour();
-        self.pending_mint(&self.blockchain().get_caller()).set(mint_block);
+        // Schedule the NFT minting event for 1 hour later
+        let current_block_time = self.blockchain().get_block_timestamp();
+        let mint_time = current_block_time + self.one_hour_in_seconds();
+        self.pending_mint(&caller).set(mint_time);
 
         Ok(())
     }
@@ -36,15 +40,15 @@ pub trait CitizenNFT {
     #[endpoint(claimCitizen)]
     fn claim_citizen(&self) -> SCResult<()> {
         let caller = self.blockchain().get_caller();
-        let current_block = self.blockchain().get_block_round();
-        let mint_block = self.pending_mint(&caller).get();
+        let current_time = self.blockchain().get_block_timestamp();
+        let mint_time = self.pending_mint(&caller).get();
 
-        require!(current_block >= mint_block, "Minting period not yet passed");
+        require!(current_time >= mint_time, "Minting period not yet passed");
 
-        // Mint the "CITIZEN" NFT for the caller.
+        // Mint the "CITIZEN" NFT for the caller
         self.issue_nft(&caller)?;
 
-        // Clear the pending mint entry.
+        // Clear the pending mint entry
         self.pending_mint(&caller).clear();
 
         Ok(())
@@ -53,14 +57,13 @@ pub trait CitizenNFT {
     /// Helper function to issue the NFT.
     fn issue_nft(&self, recipient: &ManagedAddress) -> SCResult<()> {
         // Details of the NFT issuance would go here.
-        // For simplicity, assume a function that handles NFT issuance.
+        // This would involve creating an NFT and assigning it to the recipient.
         Ok(())
     }
 
-    /// Calculate the number of blockchain rounds equivalent to one hour.
-    fn rounds_for_one_hour(&self) -> u64 {
-        // Assume approximately 6 seconds per round.
-        600
+    /// Calculate the number of seconds equivalent to one hour.
+    fn one_hour_in_seconds(&self) -> u64 {
+        3600 // 1 hour = 3600 seconds
     }
 
     /// Storage mapper to keep track of pending mints for each user.
